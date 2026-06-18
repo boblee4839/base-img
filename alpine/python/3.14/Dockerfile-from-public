@@ -1,0 +1,54 @@
+FROM python:3.14.6-alpine3.24
+
+ENV UID=1000 \
+    USER=app-user    
+RUN adduser \
+    --disabled-password \
+	--gecos "" \
+	--uid "$UID" \
+	--shell "/bin/bash" \
+	$USER
+# RUN set -eux; \
+# 	apk add --no-cache \
+# 		build-base alpine-sdk traceroute bash busybox-extras ca-certificates tzdata; \
+#         update-ca-certificates
+RUN set -eux; \
+        apk update --no-cache ;\
+        apk upgrade --no-cache ;\
+        apk add --no-cache \
+            ca-certificates \
+            tzdata \
+            gnupg \
+            xz \
+            bluez-dev \
+            bzip2-dev \
+            dpkg-dev dpkg \
+            findutils \
+            gcc \
+            gdbm-dev \
+            libc-dev \
+            libffi-dev \
+            libnsl-dev \
+            libtirpc-dev \
+            linux-headers \
+            ncurses-dev \
+            openssl-dev \
+            pax-utils \
+            readline-dev \
+            sqlite-dev \
+            tcl-dev \
+            tk \
+            tk-dev \
+            util-linux-dev \
+            xz-dev \
+            zlib-dev \
+            build-base \
+            alpine-sdk \
+            traceroute \
+            bash \
+            busybox-extras \
+            curl; \
+            update-ca-certificates
+    
+USER 1000		
+CMD ["python3"]

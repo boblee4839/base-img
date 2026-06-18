@@ -1,2 +1,2 @@
-# base-img
-base dockerfiles
+# base-images
+base image

@@ -1,0 +1,34 @@
+FROM python:3.12.13-slim-trixie
+LABEL maintainer="hareesh"
+
+ENV PYTHON_VERSION=3.12.13 \
+    UID=1000 \
+    USER=appuser
+
+RUN set -eux; \
+	\
+	apt-get update -y; \
+	apt-get upgrade -y; \
+	apt-get install -y --no-install-recommends \
+	    ca-certificates \
+		netbase \
+		tzdata \
+		dpkg-dev \
+		gcc \
+		gnupg \
+		bash \
+		traceroute \
+        net-tools \
+        curl; \
+		update-ca-certificates
+
+RUN adduser \
+    --disabled-password \
+	--gecos "" \
+	--no-create-home \
+	--uid "$UID" \
+	--shell "/bin/bash" \
+	$USER
+
+USER 1000
+CMD ["python3"]

@@ -1,0 +1,64 @@
+FROM ubuntu:devel AS builder
+
+ENV JAVA_HOME=/opt/java/openjdk
+ENV BIN_SOURCE=temurin21-binaries
+ENV download_ver=jdk-21.0.12%2B8
+ENV OPENJDK_VER=OpenJDK21U
+ENV HOTSPOT=21.0.12_8
+ENV JAVA_TYPEQ=jdk
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        curl \
+        wget \
+        gnupg \
+        ca-certificates \
+        p11-kit && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "${ARCH}" in \
+      amd64) \
+        ESUM='e4446ff06a276155697597cc0f1b15da004ff083f4964a35271ecee567177370'; \
+        BINARY_URL="https://github.com/adoptium/${BIN_SOURCE}/releases/download/${download_ver}/${OPENJDK_VER}-${JAVA_TYPEQ}_x64_linux_hotspot_${HOTSPOT}.tar.gz"; \
+        ;; \
+      arm64) \
+        ESUM='5f9c96b656827b9d14ebeda7739e25be554fa6d25669b03847c1df6e869c0679'; \
+        BINARY_URL="https://github.com/adoptium/${BIN_SOURCE}/releases/download/${download_ver}/${OPENJDK_VER}-${JAVA_TYPEQ}_aarch64_linux_hotspot_${HOTSPOT}.tar.gz"; \
+        ;; \
+      *) echo "Unsupported arch: ${ARCH}"; exit 1;; \
+    esac; \
+    curl -LfsSo /tmp/openjdk.tar.gz "${BINARY_URL}"; \
+    echo "${ESUM} */tmp/openjdk.tar.gz" | sha256sum -c -; \
+    mkdir -p "$JAVA_HOME"; \
+    tar -xf /tmp/openjdk.tar.gz -C "$JAVA_HOME" --strip-components=1; \
+    rm -f /tmp/openjdk.tar.gz
+
+FROM ubuntu:devel
+
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+ENV LANG=C.UTF-8
+
+ENV USER_ID=1010
+ENV USER_NAME=appuser
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        fontconfig \
+        fonts-noto-core \
+        ca-certificates ca-certificates-java libssecret-1-0 libssecret-1-dev libgsf-1-114 \
+        p11-kit \
+        tzdata \
+        curl \
+        bash traceroute net-tools libxml2 && \
+    rm -rf /var/lib/apt/lists/*
+
+RUN useradd -u "$USER_ID" -s /bin/sh -M "$USER_NAME"
+
+COPY --from=builder /opt/java/openjdk /opt/java/openjdk
+COPY --chmod=755 entrypoint.sh /__cacert_entrypoint.sh
+
+USER 1010
+ENTRYPOINT ["/__cacert_entrypoint.sh"]

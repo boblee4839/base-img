@@ -86,7 +86,7 @@ RUN     apk update --no-cache && \
         busybox-extras \
         curl \
         yq \
-        && update-ca-certificates && \
+        && update-ca-certificates && npm install -g npm@latest && npm audit fix --force || true && rm -rf /usr/local/lib/node_modules/npm && \
         rm -rf /tmp/*
 COPY --chmod=0755  docker-entrypoint.sh /usr/local/bin/
 ENTRYPOINT ["docker-entrypoint.sh"]

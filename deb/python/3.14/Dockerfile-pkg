@@ -1,0 +1,52 @@
+FROM debian:trixie-slim
+
+ENV PYENV_ROOT=/usr/local/pyenv
+ENV PATH="$PYENV_ROOT/bin:$PYENV_ROOT/shims:$PATH"
+ENV PYTHON_VERSION=3.14.7
+ENV UID=1000 \
+    USER=appuser	
+RUN apt-get update && apt-get upgrade; \
+    apt-get install -y --no-install-recommends passwd && \
+    useradd -u 1000 -M -s /bin/bash appuser
+    
+RUN set -eux; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        netbase \
+        tzdata \
+        dpkg-dev \
+        gcc \
+        libbluetooth-dev \
+        libbz2-dev \
+        libc6-dev \
+        libdb-dev \
+        libffi-dev \
+        libgdbm-dev \
+        liblzma-dev \
+        libncursesw5-dev \
+        libreadline-dev \
+        libsqlite3-dev \
+        libssl-dev \
+        tk-dev \
+        uuid-dev \
+        xz-utils \
+        zlib1g-dev \
+        bash curl \
+        busybox \
+        traceroute build-essential \
+        git; \
+    \
+    git clone https://github.com/pyenv/pyenv.git "$PYENV_ROOT"; \
+    \
+    pyenv install ${PYTHON_VERSION}; \
+    pyenv global ${PYTHON_VERSION}; \
+    \
+    pip install --upgrade pip setuptools wheel msgpack; \
+    \
+    apt-get update && apt-get upgrade; \
+    apt-get purge -y git build-essential; \
+    apt-get autoremove -y; \
+    rm -rf /var/lib/apt/lists/*
+
+USER 1000
+CMD ["python3"]

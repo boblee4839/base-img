@@ -1,0 +1,34 @@
+FROM alpine:3.24
+
+# Install SRE / DevOps tools
+RUN apk update && apk add --no-cache \
+    bash \
+    curl \
+    jq \
+    yq \
+    wget \
+    tar \
+    tree \
+    openssl \
+    bind-tools \
+    iputils \
+    iproute2 \
+    net-tools \
+    tcpdump \
+    traceroute \
+    busybox-extras \
+    ca-certificates \
+    coreutils \
+    findutils \
+    procps \
+    file \
+    strace \
+    lsof \
+    nmap-ncat \
+    htop \
+    vim
+RUN addgroup -g 1010 appuser && \
+    adduser -u 1010 -G appuser -s /bin/sh -D appuser
+
+USER 1010
+CMD ["sleep", "infinity"]

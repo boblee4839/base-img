@@ -1,0 +1,119 @@
+###############################################
+# Stage 1 — Builder
+###############################################
+FROM debian:trixie-slim AS builder
+
+ENV LANG=C.UTF-8
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# Temurin repo + version
+ENV TEMURIN_REPO="adoptium/temurin21-binaries"
+ENV TEMURIN_TAG="jdk-21.0.12%2B8"
+ENV TEMURIN_VERSION="21.0.12_8"
+ENV TEMURIN_MAJOR="OpenJDK21U"
+ENV TEMURIN_TYPE="jdk"
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates ca-certificates-java \
+        curl wget jq tar \
+        fontconfig fonts-noto-core \
+        libsecret-1-0 libsecret-1-dev \
+        libxml2 libgsf-1-114 \
+        p11-kit \
+        tzdata \
+        openssl bash && \
+    update-ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+#
+# === Multi‑Arch JDK Download + SHA256 Validation ===
+#
+RUN set -eux; \
+    ARCH="$(dpkg --print-architecture)"; \
+    case "${ARCH}" in \
+        amd64)   ASSET_SUFFIX="x64_linux_hotspot" ;; \
+        arm64)   ASSET_SUFFIX="aarch64_linux_hotspot" ;; \
+        *) echo "Unsupported arch: ${ARCH}"; exit 1 ;; \
+    esac; \
+    \
+    API_URL="https://api.github.com/repos/${TEMURIN_REPO}/releases/tags/${TEMURIN_TAG}"; \
+    \
+    # GitHub requires User-Agent; retry 5 times
+    curl -sL --fail --retry 5 --retry-delay 2 \
+         -H "User-Agent: docker-build" \
+         "$API_URL" -o /tmp/release.json; \
+    \
+    # Validate JSON
+    jq -e '.assets' /tmp/release.json >/dev/null; \
+    \
+    ASSET_NAME="${TEMURIN_MAJOR}-${TEMURIN_TYPE}_${ASSET_SUFFIX}_${TEMURIN_VERSION}.tar.gz"; \
+    SHA_NAME="${ASSET_NAME}.sha256.txt"; \
+    \
+    ASSET_URL=$(jq -r --arg A "$ASSET_NAME" '.assets[] | select(.name==$A) | .browser_download_url' /tmp/release.json); \
+    SHA_URL=$(jq -r --arg S "$SHA_NAME" '.assets[] | select(.name==$S) | .browser_download_url' /tmp/release.json); \
+    \
+    curl -sL --fail --retry 5 --retry-delay 2 \
+         -H "User-Agent: docker-build" \
+         "$ASSET_URL" -o /tmp/openjdk.tar.gz; \
+    \
+    curl -sL --fail --retry 5 --retry-delay 2 \
+         -H "User-Agent: docker-build" \
+         "$SHA_URL" -o /tmp/openjdk.sha256.raw; \
+    \
+    CHECKSUM=$(cut -d ' ' -f1 /tmp/openjdk.sha256.raw); \
+    echo "${CHECKSUM}  /tmp/openjdk.tar.gz" > /tmp/openjdk.sha256.txt; \
+    sha256sum -c /tmp/openjdk.sha256.txt; \
+    \
+    mkdir -p "$JAVA_HOME"; \
+    tar -xzf /tmp/openjdk.tar.gz -C "$JAVA_HOME" --strip-components=1; \
+    \
+    rm -f /tmp/openjdk.tar.gz /tmp/openjdk.sha256.txt /tmp/openjdk.sha256.raw /tmp/release.json
+
+
+RUN mkdir -p /opt/libs && \
+    cp /usr/lib/x86_64-linux-gnu/libfontconfig.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libfreetype.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libxml2.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libsecret-1.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libgsf-1.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libp11-kit.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libcurl.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libssl.so* /opt/libs/ && \
+    cp /usr/lib/x86_64-linux-gnu/libcrypto.so* /opt/libs/
+###############################################
+# Stage 2 — Runtime
+###############################################
+FROM debian:trixie-slim
+ENV LANG=C.UTF-8
+ENV JAVA_HOME=/opt/java/openjdk
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+ENV LD_LIBRARY_PATH=/opt/libs
+
+# Minimal runtime deps
+RUN apt-get update -y && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates ca-certificates-java \
+        tzdata \
+        bash \
+        openssl && \
+    update-ca-certificates && apt-get update -y && apt-get upgrade -y && \
+    rm -rf /var/lib/apt/lists/*
+
+#
+# === Copy JDK + Maven from builder ===
+#
+COPY --from=builder --chmod=0775 /opt/java/openjdk /opt/java/openjdk
+COPY --from=builder  --chmod=0775 /opt/libs /opt/libs
+
+#
+# === Non‑Root User ===
+#
+ENV USER_ID=1010
+ENV USER_NAME=appuser
+
+RUN useradd -m -u "$USER_ID" -s /bin/bash "$USER_NAME"
+COPY --chmod=755 entrypoint.sh /__cacert_entrypoint.sh
+
+USER 1010
+ENTRYPOINT ["/__cacert_entrypoint.sh"]

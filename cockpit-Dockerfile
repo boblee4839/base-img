@@ -1,0 +1,30 @@
+FROM debian:bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install Cockpit (no file browser plugin exists anymore)
+RUN apt-get update && \
+    apt-get install -y \
+        cockpit \
+        cockpit-storaged \
+        cockpit-networkmanager \
+        cockpit-system \
+        systemd \
+        dbus \
+        curl \
+        ca-certificates && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install VS Code Server (file browser + editor + terminal)
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+
+# Systemd needs cgroups
+VOLUME [ "/sys/fs/cgroup" ]
+
+# Enable Cockpit
+RUN systemctl enable cockpit.socket
+
+EXPOSE 9090 8080
+
+CMD ["/lib/systemd/systemd"]

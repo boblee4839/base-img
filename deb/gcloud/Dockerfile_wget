@@ -1,0 +1,58 @@
+FROM debian:stable-slim
+
+ARG CLOUD_SDK_VERSION=594.0.1
+ENV CLOUD_SDK_VERSION=${CLOUD_SDK_VERSION} \
+    HOME=/home/cloudsdk \
+    CLOUDSDK_CONFIG=/home/cloudsdk/.config/gcloud \
+    KUBECONFIG=/home/cloudsdk/.kube/config \
+    PYTHONWARNINGS="ignore"
+
+# 1. Create non-root user, home directories, and symlink /root/.config & /root/.kube
+RUN groupadd -r -g 1000 cloudsdk && \
+    useradd -r -u 1000 -m -s /bin/bash -g cloudsdk cloudsdk && \
+    mkdir -p /home/cloudsdk/.config/gcloud /home/cloudsdk/.kube /etc/apt/keyrings && \
+    chown -R cloudsdk:cloudsdk /home/cloudsdk && \
+    rm -rf /root/.config /root/.kube && \
+    ln -s /home/cloudsdk/.config /root/.config && \
+    ln -s /home/cloudsdk/.kube /root/.kube && \
+    chmod 755 /root
+
+# 2. Copy local GPG key fallback into /tmp
+# COPY aapt-key.gpg /tmp/aapt-key.gpg
+
+# 3. Install core CLI + kubectl + curl + wget (only purge gnupg)
+RUN set -eux; \
+    apt-get update -qqy && \
+    apt-get install -qqy --no-install-recommends \
+        ca-certificates \
+        curl \
+        wget \
+        gnupg; \
+    (wget -qO- https://packages.cloud.google.com/apt/doc/apt-key.gpg || cat /tmp/aapt-key.gpg) \
+        | gpg --dearmor --yes -o /etc/apt/keyrings/google-cloud-cli.gpg; \
+    rm -f /tmp/aapt-key.gpg; \
+    echo "deb [signed-by=/etc/apt/keyrings/google-cloud-cli.gpg] https://packages.cloud.google.com/apt cloud-sdk main" \
+        > /etc/apt/sources.list.d/google-cloud-sdk.list; \
+    apt-get update -qqy && \
+    apt-get install -y --no-install-recommends \
+        google-cloud-cli=${CLOUD_SDK_VERSION}-0 \
+        kubectl; \
+    ln -sf /usr/lib/google-cloud-sdk/platform/bundledpythonunix/bin/python3 /usr/local/bin/python3; \
+    ln -sf /usr/lib/google-cloud-sdk/platform/bundledpythonunix/bin/python3 /usr/local/bin/python; \
+    apt-get purge -y --auto-remove gnupg curl wget; \
+    apt-get clean; \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*; \
+    find /usr/lib/google-cloud-sdk -name "__pycache__" -exec rm -rf {} +; \
+    chown -R cloudsdk:cloudsdk /home/cloudsdk
+
+# 4. Switch to non-root user and verify
+USER cloudsdk
+WORKDIR /home/cloudsdk
+
+RUN gcloud config set core/disable_usage_reporting true && \
+    gcloud config set component_manager/disable_update_check true && \
+    gcloud config set metrics/environment docker_image_latest && \
+    python3 --version && \
+    kubectl version --client && \
+    gcloud --version && \
+    bq version
